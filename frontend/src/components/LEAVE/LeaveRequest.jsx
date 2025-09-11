@@ -48,10 +48,10 @@ const LeaveRequest = () => {
   const [successAction, setSuccessAction] = useState("");
 
   const statusOptions = [
-    { value: '0', label: 'Pending', color: '#ff9800' },
-    { value: '1', label: 'Approved by Manager', color: '#2196f3' },
-    { value: '2', label: 'Approved by HR', color: '#4caf50' },
-    { value: '3', label: 'Denied by Manager/HR', color: '#f44336' }
+    { value: '0', label: 'Pending', color: '#000000'  },
+    { value: '1', label: 'Approved by Manager and Pending for HR', color: '#6d2323' },
+    { value: '2', label: 'Approved by HR', color: '#a31d1d' },
+    { value: '3', label: 'Denied by Manager/HR', color: '#000000' }
   ];
 
   useEffect(() => {

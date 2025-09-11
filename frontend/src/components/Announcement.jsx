@@ -20,8 +20,23 @@ const AnnouncementForm = () => {
     if (image) formData.append('image', image);
 
     try {
-      await axios.post('http://localhost:5000/api/announcements', formData);
-      alert('Announcement added!');
+      // First: create announcement
+      const response = await axios.post(
+        'http://localhost:5000/api/announcements',
+        formData
+      );
+
+      // Then: send notification using the new announcement’s ID + title
+      await axios.post(
+        'http://localhost:5000/Notification/notifications/from-announcement',
+        {
+          announcementId: response.data.id,
+          title: response.data.title,
+        }
+      );
+
+      alert('Announcement added & notification sent!');
+
       // Clear form after successful submission
       setTitle('');
       setSubtitle('');

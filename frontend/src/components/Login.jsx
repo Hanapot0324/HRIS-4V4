@@ -147,6 +147,9 @@ const Login = () => {
           localStorage.setItem("employeeNumber", decoded.employeeNumber || loginData.employeeNumber || "");
           localStorage.setItem("role", decoded.role || loginData.role || "");
 
+          // In your login component after successful authentication:
+          sessionStorage.setItem("showWelcome", "true");
+          navigate('/home');
 
           const role = decoded.role || loginData.role;
           if (role === "superadmin" || role === "administrator") {

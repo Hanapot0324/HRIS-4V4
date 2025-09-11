@@ -120,6 +120,8 @@ import Payslip from './components/PAYROLL/Payslip';
 import PayslipOverall from './components/PAYROLL/PayslipOverall';
 import PayslipBulk from './components/PAYROLL/PayslipBulk';
 import SuccessfullOverlay from './components/SuccessfullOverlay';
+import WelcomeOverlay from './components/WelcomeOverlay';
+import LeaveRequestStaff from './components/LEAVE/LeaveRequestStaff';
 
 
 
@@ -881,10 +883,22 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            <Route
+              path="/leave-request-staff"
+              element={
+                <ProtectedRoute allowedRoles={['staff','administrator', 'superadmin']}>
+                  <LeaveRequestStaff/>
+                </ProtectedRoute>
+              }
+            />
+
+#
            
 
 
             <Route path="/unauthorized" element={<Unauthorized />} />
+            <Route path="/welcome-overlay" element={<WelcomeOverlay />} />
           </Routes>
         </Box>
 

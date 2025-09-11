@@ -7,10 +7,16 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import LogoutIcon from '@mui/icons-material/Logout';
 
 
+
+
+
 import { Container, Box, Grid, Typography, Avatar, Button, Stack, Badge } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { AccessTime, AccountBalance, Campaign, Description, Download, KeyboardArrowDown, Person } from '@mui/icons-material';
+import WelcomeOverlay from './WelcomeOverlay';
+
+
 
 
 const Home = () => {
@@ -25,6 +31,10 @@ const [profilePicture, setProfilePicture] = useState(null);
 const navigate = useNavigate();
 
 
+
+
+
+
 const monthName = currentDate.toLocaleString('default', { month: 'long' });
 const year = currentDate.getFullYear();
 const month = currentDate.getMonth(); // 0-based
@@ -32,96 +42,155 @@ const firstDay = new Date(year, month, 1).getDay(); // Sunday = 0
 const daysInMonth = new Date(year, month + 1, 0).getDate();
 
 
+
+
 //bago 'to (hanna)
 
-
-const [notifModalOpen, setNotifModalOpen] = useState(false);
-
-
-
+// notifications
+const [notifications, setNotifications] = useState([]);
+const [selectedNotif, setSelectedNotif] = useState(null);
 
 useEffect(() => {
-  const interval = setInterval(() => {
-    setCurrentDate(new Date());
-  }, 1000);
+  const fetchNotifications = async () => {
+    try {
+      const response = await axios.get("http://localhost:5000/Notification/notifications");
+      setNotifications(response.data);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    }
+  };
 
-
+  fetchNotifications();
+  const interval = setInterval(fetchNotifications, 10000); // refresh every 10s
   return () => clearInterval(interval);
 }, []);
 
 
-const getUserInfo = () => {
-  const token = localStorage.getItem('token');
-  if (!token) return {};
-
-
+// Function to approve/deny leave requests
+const updateLeaveStatus = async (leaveId, newStatus) => {
   try {
-    const decoded = JSON.parse(atob(token.split('.')[1]));
-    return {
-      role: decoded.role,
-      employeeNumber: decoded.employeeNumber,
-      username: decoded.username,
-    };
-  } catch (error) {
-    console.error('Error decoding token:', error);
-    return {};
+    await axios.put(`http://localhost:5000/leaveRoute/leave_request/${leaveId}`, {
+      status: newStatus,
+    });
+
+    // Close the modal
+    setSelectedNotif(null);
+
+    // Refresh notifications
+    const res = await axios.get("http://localhost:5000/Notification/notifications");
+    setNotifications(res.data);
+
+    console.log(`Leave request ${leaveId} updated to status ${newStatus}`);
+  } catch (err) {
+    console.error("Error updating leave status:", err);
+    alert("Failed to update leave status. Please try again.");
   }
 };
 
 
-useEffect(() => {
-  const userInfo = getUserInfo();
-  if (userInfo.username && userInfo.employeeNumber) {
-    setUsername(userInfo.username);
-    setEmployeeNumber(userInfo.employeeNumber);
-  }
-}, []);
 
 
-useEffect(() => {
-  const fetchAnnouncements = async () => {
-    try {
-      const response = await axios.get('http://localhost:5000/api/announcements');
-      setAnnouncements(response.data);
-    } catch (error) {
-      console.error('Error fetching announcements:', error);
+
+const [notifModalOpen, setNotifModalOpen] = useState(false);
+
+const [showWelcome, setShowWelcome] = useState(false);
+
+  useEffect(() => {
+    const shouldShow = sessionStorage.getItem("showWelcome") === "true";
+    if (shouldShow) {
+      setShowWelcome(true);
+      sessionStorage.setItem("showWelcome", "false"); // reset after first use
     }
-  };
+  }, []);
+
+  useEffect(() => {
+      const userInfo = getUserInfo();
+      if (userInfo.username && userInfo.employeeNumber) {
+        setUsername(userInfo.username);
+        setEmployeeNumber(userInfo.employeeNumber);
+      }
 
 
-  fetchAnnouncements();
-}, []);
+      // Hide after 3 seconds
+      const timer = setTimeout(() => setShowWelcome(false), 3000);
+      return () => clearTimeout(timer);
+    }, []);
 
 
-// Auto-slide effect
-useEffect(() => {
-  if (announcements.length > 0) {
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % announcements.length);
-    }, 5000); // Change slide every 5 seconds
-    return () => clearInterval(timer);
-  }
-}, [announcements]);
+    // date for the Welcome Back
+    useEffect(() => {
+      const interval = setInterval(() => {
+        setCurrentDate(new Date());
+      }, 1000);
+      return () => clearInterval(interval);
+    }, []);
 
 
-const handlePrevSlide = () => {
-  setCurrentSlide((prev) => (prev - 1 + announcements.length) % announcements.length);
-};
 
 
-const handleNextSlide = () => {
-  setCurrentSlide((prev) => (prev + 1) % announcements.length);
-};
+    const getUserInfo = () => {
+      const token = localStorage.getItem('token');
+      if (!token) return {};
+        try {
+          const decoded = JSON.parse(atob(token.split('.')[1]));
+          return {
+            role: decoded.role,
+            employeeNumber: decoded.employeeNumber,
+            username: decoded.username,
+          };
+        } catch (error) {
+          console.error('Error decoding token:', error);
+          return {};
+        }
+      };
+
+      useEffect(() => {
+        const userInfo = getUserInfo();
+        if (userInfo.username && userInfo.employeeNumber) {
+          setUsername(userInfo.username);
+          setEmployeeNumber(userInfo.employeeNumber);
+        }
+      }, []);
 
 
- const today = new Date();
-  const formattedDate = today.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
 
 
+      useEffect(() => {
+        const fetchAnnouncements = async () => {
+          try {
+            const response = await axios.get('http://localhost:5000/api/announcements');
+            setAnnouncements(response.data);
+          } catch (error) {
+            console.error('Error fetching announcements:', error);
+          }
+        };
+        fetchAnnouncements();
+      }, []);
+
+        // Auto-slide effect
+        useEffect(() => {
+          if (announcements.length > 0) {
+            const timer = setInterval(() => {
+              setCurrentSlide((prev) => (prev + 1) % announcements.length);
+            }, 5000); // Change slide every 5 seconds
+            return () => clearInterval(timer);
+          }
+        }, [announcements]);
+
+          const handlePrevSlide = () => {
+            setCurrentSlide((prev) => (prev - 1 + announcements.length) % announcements.length);
+          };
+
+          const handleNextSlide = () => {
+            setCurrentSlide((prev) => (prev + 1) % announcements.length);
+          };
+
+          const today = new Date();
+            const formattedDate = today.toLocaleDateString(undefined, {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            });
 
 
 // Sample Philippine holidays (MM-DD format)
@@ -139,10 +208,14 @@ const philippineHolidays = [
 ];
 
 
+
+
 const handleOpenModal = (announcement) => {
   setSelectedAnnouncement(announcement);
   setOpenModal(true);
 };
+
+
 
 
 const handleCloseModal = () => {
@@ -151,10 +224,14 @@ const handleCloseModal = () => {
 };
 
 
+
+
 const handleLogout = () => {
   localStorage.removeItem('token');
   navigate('/login');
 };
+
+
 
 
 useEffect(() => {
@@ -171,18 +248,33 @@ useEffect(() => {
   };
 
 
+
+
   if (employeeNumber) {
     fetchProfilePicture();
   }
 }, [employeeNumber]);
 
 
+
+
  
   return (
+    <>
+      <WelcomeOverlay
+        open={showWelcome}
+        username={username}
+        employeeNumber={employeeNumber}
+      />
+      {!showWelcome && (
+
+
     <Container maxWidth={false} sx={{ backgroundColor: 'inherit', minHeight: '110vh', display: 'flex', ml: 2, mt: -5 }}>
       {/* Main Content */}
       <Box sx={{ flexGrow: 1, mr: '520px' }}>
         {/* Top Profile Row */}
+
+
 
 
         {/*BOX FOR THE THREE COLUMN*/}
@@ -196,6 +288,8 @@ useEffect(() => {
             mb: 2,
           }}
         >
+
+
 
 
         <Box
@@ -239,8 +333,12 @@ useEffect(() => {
             >
 
 
+
+
              
              
+
+
 
 
               {/* Time Tracking */}
@@ -273,14 +371,22 @@ useEffect(() => {
           </Link>
 
 
+
+
          
+
+
 
 
          
         </Box>
 
 
+
+
           {/*BOX FOR THE PAYSLIP*/}
+
+
 
 
           <Box
@@ -295,10 +401,14 @@ useEffect(() => {
                     minWidth:'250px'
 
 
+
+
                    
                   }}
                 >
-                  
+                 
+
+
 
 
                   <Typography sx={{ color: "#6d2323", fontWeight: "bold", mb: 3.5, fontSize: '20px' }}>
@@ -350,6 +460,8 @@ useEffect(() => {
             </Box>
 
 
+
+
         {/*BOX FOR THE LEAVE*/}
         <Box
           sx={{
@@ -362,7 +474,7 @@ useEffect(() => {
             marginBottom: '14px',
             minHeight: '140px',
             minWidth: '180px'
-            
+           
           }}
         >
            <Typography sx={{ color: "#6d2323", fontWeight: "bold", mb: 3.5, fontSize: '20px' }}>
@@ -406,23 +518,39 @@ useEffect(() => {
 
 
 
+
+
+
+
  
       </Box>
 
 
-        </Box>
-
-
 
 
         </Box>
 
 
+
+
+
+
+
+
+        </Box>
+
+
+
+
        
+
+
 
 
        
        
+
+
 
 
         {/* Middle Grid */}
@@ -470,6 +598,8 @@ useEffect(() => {
                   </IconButton>
 
 
+
+
                   {/* Image */}
                   <Box
                     component="img"
@@ -484,6 +614,8 @@ useEffect(() => {
                       marginBottom: 1,
                     }}
                   />
+
+
 
 
                   {/* Next Button */}
@@ -505,6 +637,8 @@ useEffect(() => {
                   </IconButton>
 
 
+
+
                   <Typography fontWeight="bold" fontSize="x-large" sx={{ mt: 1 }}>
                     {announcements[currentSlide].title}
                   </Typography>
@@ -520,6 +654,8 @@ useEffect(() => {
             <Box sx={{ minWidth: '300px', height: '550px',backgroundColor: '#ffffff', color: '#6d2323', p: 1.5 , borderRadius: 2, border: '1px solid #6d2323', mt: -2,      overflowY: 'auto' // <-- Vertical scroll only
 }}>
               <Typography fontWeight="bolder" fontSize="1.3rem" textAlign="center">Announcements</Typography>
+
+
 
 
               {announcements.map((announcement) => (
@@ -546,8 +682,12 @@ useEffect(() => {
                 </Button>
 
 
+
+
                 </Box>
               ))}
+
+
 
 
               {/* Modal for full announcement details */}
@@ -618,8 +758,12 @@ useEffect(() => {
           </Grid>
 
 
+
+
          
         </Grid>
+
+
 
 
         {/* Bottom Grid */}
@@ -629,6 +773,8 @@ useEffect(() => {
             <Box sx={{ width: '65rem', backgroundColor: '#ffffff', color: '#6d2323', p: 1.5, borderRadius: 2, border: '1px solid #6d2323',  }}>
               <Typography fontWeight="bolder" fontSize="1.5rem">Leave Tracker</Typography>
               <Typography fontSize="small" mb={2}>Check leave status and availability</Typography>
+
+
 
 
               <Grid container spacing={1}>
@@ -669,10 +815,14 @@ useEffect(() => {
                 </Grid>
 
 
+
+
                 {/* Leaves Section */}
                 <Grid item xs={12} md={5}>
                   <Box sx={{ backgroundColor: 'white', borderRadius: 1, p: 1.5, color: 'black' }}>
                     <Typography fontWeight="bold" sx={{ mb: 1 }}>Leaves</Typography>
+
+
 
 
                     <Box
@@ -708,6 +858,8 @@ useEffect(() => {
                         </Button>
                       </Box>
                     </Box>
+
+
 
 
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
@@ -746,9 +898,13 @@ useEffect(() => {
           </Grid>
 
 
+
+
          
         </Grid>
       </Box>
+
+
 
 
       {/* Sidebar */}
@@ -808,14 +964,147 @@ useEffect(() => {
 
 
             <Tooltip title="Notifications">
-              <IconButton size="small" sx={{ color: 'black' }} onClick={() => setNotifModalOpen(true)}>
-              <Badge badgeContent={3} color="error">
-                <NotificationsIcon fontSize="small" />
-              </Badge>
-            </IconButton>
-
-
+              <IconButton
+                size="small"
+                sx={{ color: 'black' }}
+                onClick={() => setNotifModalOpen(true)}   // 👈 this opens the modal
+              >
+                <Badge badgeContent={notifications.length} color="error">
+                  <NotificationsIcon fontSize="small" />
+                </Badge>
+              </IconButton>
             </Tooltip>
+
+            {/* MODAL TO SHOW BOTH NOTIFICATIONS AND ANNOUNCEMENTS */}
+              <Modal
+                open={notifModalOpen}
+                onClose={() => setNotifModalOpen(false)}
+                aria-labelledby="notification-modal"
+              >
+                <Box sx={{
+                  position: 'absolute',
+                  top: '120px',
+                  right: '20px',
+                  width: '320px',
+                  bgcolor: '#fff',
+                  boxShadow: 24,
+                  borderRadius: 2,
+                  p: 2,
+                  maxHeight: '80vh',
+                  overflowY: 'auto',
+                  zIndex: 1500
+                }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#6d2323' }}>
+                    🔔 Notifications
+                  </Typography>
+
+                  {/* Leave Requests */}
+                  <Typography fontWeight="bold" sx={{ mb: 1 }}>Leave Requests</Typography>
+                  {notifications.map((notif) => (
+                    <Box
+                      key={notif.id}
+                      sx={{
+                        mb: 1.5,
+                        p: 1,
+                        borderRadius: 1,
+                        backgroundColor: notif.is_read ? '#fff' : '#fff3f3',
+                        border: '1px solid #6d2323',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => {
+                        setSelectedNotif(notif);   // <-- open detailed modal
+                        setNotifModalOpen(false);
+                      }}
+                    >
+                      <Typography fontWeight="bold" fontSize="0.9rem">{notif.title}</Typography>
+                      <Typography fontSize="0.75rem">{new Date(notif.created_at).toLocaleString()}</Typography>
+                    </Box>
+                  ))}
+                  {notifications.length === 0 && (
+                    <Typography fontSize="0.85rem">No leave requests yet.</Typography>
+                  )}
+
+                  <Box sx={{ borderBottom: '1px solid #ccc', my: 2 }} />
+
+                  {/* Announcements */}
+                  <Typography fontWeight="bold" sx={{ mb: 1 }}>Announcements</Typography>
+                  {announcements.slice(0, 5).map((item, idx) => (
+                    <Box
+                      key={idx}
+                      sx={{
+                        mb: 1.5,
+                        p: 1,
+                        borderRadius: 1,
+                        backgroundColor: '#fff',
+                        border: '1px solid #ddd',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => {
+                        setSelectedAnnouncement(item);
+                        setNotifModalOpen(false);
+                        setOpenModal(true);
+                      }}
+                    >
+                      <Typography fontWeight="bold" fontSize="0.9rem">{item.title}</Typography>
+                      <Typography fontSize="0.75rem">{new Date(item.date).toLocaleDateString()}</Typography>
+                    </Box>
+                  ))}
+                  {announcements.length === 0 && (
+                    <Typography fontSize="0.85rem">No announcements at the moment.</Typography>
+                  )}
+                </Box>
+              </Modal>
+
+              {/* MODAL FOR LEAVE STATUS ACTIONS */}
+                <Modal
+                  open={!!selectedNotif}
+                  onClose={() => setSelectedNotif(null)}
+                >
+                  <Box sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    bgcolor: '#fff',
+                    p: 3,
+                    borderRadius: 2,
+                    width: 400
+                  }}>
+                    {selectedNotif && (
+                      <>
+                        <Typography variant="h6" gutterBottom>{selectedNotif.title}</Typography>
+                        <Typography variant="body1" gutterBottom>{selectedNotif.message}</Typography>
+
+                        <Stack direction="row" justifyContent="flex-end" sx={{ mt: 2 }}>
+                          <Button
+                            variant="contained"
+                            sx={{
+                              backgroundColor: "#6D2323",
+                              "&:hover": { backgroundColor: "#541818" }
+                            }}
+                            onClick={async () => {
+                              try {
+                                // 1️⃣ Mark notification as read
+                                await axios.put(`http://localhost:5000/Notification/notifications/${selectedNotif.id}/read`);
+
+                                // 2️⃣ Close modal
+                                setSelectedNotif(null);
+
+                                // 3️⃣ Navigate to Leave Request page
+                                navigate("/leave-request");
+                              } catch (err) {
+                                console.error("Error marking notification as read:", err);
+                              }
+                            }}
+                          >
+                            See More
+                          </Button>
+                        </Stack>
+                      </>
+                    )}
+                  </Box>
+                </Modal>
+
             <Tooltip title="More Options">
               <IconButton size="small" sx={{ color: 'black' }}>
                 <ArrowDropDownIcon fontSize="small" />
@@ -823,7 +1112,11 @@ useEffect(() => {
             </Tooltip>
 
 
+
+
           </Box>
+
+
 
 
           <Tooltip title="Go to Profile">
@@ -861,6 +1154,8 @@ useEffect(() => {
               </Typography>
 
 
+
+
               <Typography
                 variant="body2"
                 color="text.secondary"
@@ -882,11 +1177,19 @@ useEffect(() => {
         </Box>
 
 
+
+
         {/* Divider */}
         <Box sx={{ borderBottom: '2px solid #700000', mb: 3 }} />
 
 
+
+
        
+
+
+
+
 
 
 
@@ -913,6 +1216,8 @@ useEffect(() => {
       QUICK LINKS
     </Typography>
   </Box>
+
+
 
 
   {/* Grid of Cards */}
@@ -944,6 +1249,8 @@ useEffect(() => {
     </Grid>
 
 
+
+
     {/* PDS */}
     <Grid item xs={3}>
       <Link to="/pds1" style={{ textDecoration: 'none' }}>
@@ -969,6 +1276,8 @@ useEffect(() => {
         </Box>
       </Link>
     </Grid>
+
+
 
 
     {/* Payslip */}
@@ -998,6 +1307,8 @@ useEffect(() => {
     </Grid>
 
 
+
+
     {/* Request Leave */}
     <Grid item xs={3}>
       <Link to="/leave-request" style={{ textDecoration: 'none' }}>
@@ -1025,7 +1336,9 @@ useEffect(() => {
     </Grid>
   </Grid>
 
+
 </Box>
+
 
 {/* Admin Panel */}
             <Card sx={{border: "1px solid #6d2323", borderRadius: 2, mt: 1.5}}>
@@ -1052,12 +1365,14 @@ useEffect(() => {
                   ].map((btn, i) => {
                     let link = null;
 
+
                     if (btn === "Registration") link = "/registration";
                     if (btn === "Announcement") link = "/announcement";
                     if (btn === "Leaves") link = "/leave-request";
                     if (btn === "Payroll") link = "/payroll-table";
                     if (btn === "DTRs") link = "/daily_time_record_faculty";
                     if (btn === "Audit") link = "/audit-logs";
+
 
                      return (
                       <Grid item xs={6} key={i}>
@@ -1087,6 +1402,7 @@ useEffect(() => {
               </CardContent>
             </Card>
 
+
 <Box
   sx={{
     border: '1px solid #6d2323',
@@ -1100,7 +1416,9 @@ useEffect(() => {
 >
 
 
-  
+
+
+ 
   {/* NOTIFICATIONS */}
   <Box
     sx={{
@@ -1135,82 +1453,22 @@ useEffect(() => {
   </Box>
       </Box>
 
-
-
-
-
-
-
-
-{/*MODAL TO PARA SA NOTIFICATIONS POP UP*/}
-      <Modal
-  open={notifModalOpen}
-  onClose={() => setNotifModalOpen(false)}
-  aria-labelledby="notification-modal"
-  aria-describedby="notifications-list"
->
-  <Box sx={{
-    position: 'absolute',
-    top: '120px',
-    right: '20px',
-    width: '290px',
-    bgcolor: '#fff',
-    boxShadow: 24,
-    borderRadius: 2,
-    p: 2,
-    maxHeight: '80vh',
-    overflowY: 'auto',
-    zIndex: 1500,
-    '@media (max-width: 600px)': {
-      width: '90vw',
-      right: '5%',
-    },
-  }}>
-    <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#6d2323' }}>
-      Notifications
-    </Typography>
-   
-    {announcements.slice(0, 5).map((item, idx) => (
-      <Box
-        key={idx}
-        sx={{
-          mb: 1.5,
-          p: 1,
-          borderRadius: 1,
-          backgroundColor: '#fff3f3',
-          border: '1px solid #6d2323',
-          cursor: 'pointer',
-          transition: '0.2s',
-          '&:hover': {
-            backgroundColor: '#fce8e8'
-          }
-        }}
-        onClick={() => {
-          setSelectedAnnouncement(item);
-          setNotifModalOpen(false);
-          setOpenModal(true);
-        }}
-      >
-        <Typography fontWeight="bold" fontSize="0.9rem">{item.title}</Typography>
-        <Typography fontSize="0.75rem">{new Date(item.date).toLocaleDateString()}</Typography>
-      </Box>
-    ))}
-    {announcements.length === 0 && (
-      <Typography fontSize="0.85rem">No notifications at the moment.</Typography>
-    )}
-  </Box>
-</Modal>
-
-
     </Container>
-
-
-   
+      )}
+    </>
   );
 };
 
 
+
+
 export default Home;
+
+
+
+
+
+
 
 
 

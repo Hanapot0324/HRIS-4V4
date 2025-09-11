@@ -47,6 +47,8 @@ const Remittance = require('./payrollRoutes/Remittance');
 const Leave = require('./dashboardRoutes/Leave');
 const SendPayslip = require('./payrollRoutes/SendPayslip');
 
+const Notification = require('./dashboardRoutes/Notification');
+
 
 
 
@@ -137,6 +139,7 @@ app.use('/Remittance', Remittance);
 app.use('/leaveRoute', Leave);
 app.use('/SendPayslipRoute', SendPayslip);
 
+app.use('/Notification', Notification);
 
 
 
