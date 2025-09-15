@@ -136,7 +136,7 @@ app.use('/SalaryGradeTable', SalaryGradeTable);
 app.use('/Remittance', Remittance);
 
 
-app.use('/leaveRoute', Leave);
+app.use("/leaveRoute", Leave); // e.g., /leaveRoute/leave_request/:id
 app.use('/SendPayslipRoute', SendPayslip);
 
 app.use('/Notification', Notification);
@@ -3532,3 +3532,5 @@ app.delete('/api/announcements/:id', (req, res) => {
     });
   });
 });
+
+

@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import LeaveCredits from './LeaveCredits';
+
 import {
   Container,
   Typography,
@@ -26,6 +30,7 @@ import {
 
 import LoadingOverlay from '../LoadingOverlay';
 import SuccessfullOverlay from '../SuccessfullOverlay';
+import LeaveDatePickerModal from './LeaveDatePicker';
 
 const LeaveRequestStaff = () => {
   const [leaveRequests, setLeaveRequests] = useState([]);
@@ -39,6 +44,22 @@ const LeaveRequestStaff = () => {
   const [successAction, setSuccessAction] = useState("");
   const [monthFilter, setMonthFilter] = useState('');
   const [personID, setPersonID] = useState('');
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [dateModalOpen, setDateModalOpen] = useState(false);
+  const [selectedDates, setSelectedDates] = useState([]);
+
+    
+  // toggle function for multiple dates
+      const toggleDate = (dateStr) => {
+        setSelectedDates((prev) =>
+          prev.includes(dateStr)
+            ? prev.filter((d) => d !== dateStr)
+            : [...prev, dateStr]
+        );
+      };
+
+    
+
 
   const months = [
     { value: '', label: 'All Months' },
@@ -113,25 +134,15 @@ const LeaveRequestStaff = () => {
 
   const fetchLeaveRequests = async () => {
     try {
-      console.log('Fetching leave requests...');
-      const res = await axios.get(`http://localhost:5000/leaveRoute/leave_request`);
-      console.log('All leave requests:', res.data);
-      
-      // Only show current employee's requests
-      const userRequests = res.data.filter(request => request.employeeNumber === personID);
-      console.log('User requests filtered:', userRequests);
-      
-      // Log each request's status for debugging
-      userRequests.forEach(request => {
-        console.log(`Request ID ${request.id}: status = "${request.status}" (type: ${typeof request.status})`);
-      });
-      
-      setLeaveRequests(userRequests);
+      const res = await axios.get(
+        `http://localhost:5000/leaveRoute/leave_request/${personID}`
+      );
+      setLeaveRequests(res.data);
     } catch (error) {
-      console.error('Error fetching leave requests:', error.response || error);
-      alert('Error fetching leave requests. Please check if the server is running.');
+      console.error("Error fetching leave requests:", error);
     }
   };
+
 
   const fetchLeaveTypes = async () => {
     try {
@@ -145,115 +156,78 @@ const LeaveRequestStaff = () => {
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    // Ensure date is in YYYY-MM-DD format
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
+  const formatDate = (dateObj) => {
+    if (!dateObj) return '';
+    
+    // Handle both Date objects and date strings
+    const date = typeof dateObj === 'string' ? new Date(dateObj) : dateObj;
+    
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date:', dateObj);
+      return '';
+    }
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
 
-const handleAdd = async () => {
-  // Validation
-  if (!newLeaveRequest.leave_code) {
-    alert('Please select a leave type.');
-    return;
-  }
+  // Updated handleAdd function with better error handling and logging
+  const handleAdd = async () => {
+    if (!newLeaveRequest.leave_code) {
+      alert("Please select a leave type.");
+      return;
+    }
+    if (selectedDates.length === 0) {
+      alert("Please pick at least one leave date.");
+      return;
+    }
 
-  if (!newLeaveRequest.leave_date) {
-    alert('Please select a leave date.');
-    return;
-  }
-
-  // Check if there's already a request for this date
-  const existingRequest = leaveRequests.find(
-    request => request.leave_date === formatDate(newLeaveRequest.leave_date)
-  );
-
-  if (existingRequest) {
-    alert('You already have a leave request for this date.');
-    return;
-  }
-
-  setLoading(true);
-  try {
-    const payload = {
+    console.log('Submitting leave request:', {
       employeeNumber: personID,
       leave_code: newLeaveRequest.leave_code,
-      leave_date: formatDate(newLeaveRequest.leave_date),
-      status: '0' // Default to pending
-    };
-
-    console.log('Submitting payload:', payload);
-
-    // 1️⃣ Create leave request
-    const response = await axios.post(
-      'http://localhost:5000/leaveRoute/leave_request',
-      payload
-    );
-    console.log('Leave request created:', response.data);
-
-    // 2️⃣ Also create a leave assignment
-    try {
-      const assignmentPayload = {
-        leave_code: payload.leave_code,
-        employeeNumber: payload.employeeNumber
-      };
-      console.log('Creating leave assignment:', assignmentPayload);
-      await axios.post(
-        'http://localhost:5000/leaveRoute/leave_assignment',
-        assignmentPayload
-      );
-    } catch (assignmentError) {
-      console.error('Error creating leave assignment:', assignmentError);
-      // Don't fail the whole process if assignment fails
-    }
-
-    // 3️⃣ Trigger a notification for admin
-    try {
-      await axios.post('http://localhost:5000/Notification/notifications/from-leave', {
-        leaveRequestId: response.data.id,       // from leave request insert
-        employeeNumber: payload.employeeNumber, // staff ID
-        leaveType: payload.leave_code,          // leave code
-        leaveDate: payload.leave_date           // leave date
-      });
-      console.log('Notification for admin created.');
-    } catch (notifError) {
-      console.error('Error creating leave notification:', notifError);
-      // Don’t block the user just because notification failed
-    }
-
-    // 4️⃣ Reset form
-    setNewLeaveRequest({
-      leave_code: '',
-      leave_date: ''
+      leave_dates: selectedDates,
+      status: "0",
     });
 
-    setTimeout(() => {
-      setLoading(false);
-      setSuccessAction('adding');
+    setLoading(true);
+    try {
+      const payload = {
+        employeeNumber: personID,
+        leave_code: newLeaveRequest.leave_code,
+        leave_dates: selectedDates, // selectedDates should already be in YYYY-MM-DD format
+        status: "0",
+      };
+
+      const response = await axios.post("http://localhost:5000/leaveRoute/leave_request", payload);
+      console.log('Server response:', response.data);
+
+      // Show success overlay
+      setSuccessAction("Leave Request Submitted");
       setSuccessOpen(true);
-      setTimeout(() => setSuccessOpen(false), 2000);
-    }, 300);
 
-    // 5️⃣ Refresh the list
-    fetchLeaveRequests();
-  } catch (error) {
-    console.error('Error adding leave request:', error.response || error);
-    setLoading(false);
+      // Auto close success overlay after 3 seconds
+      setTimeout(() => setSuccessOpen(false), 3000);
 
-    if (error.response) {
-      alert(
-        `Error: ${
-          error.response.data.error || 'Failed to submit leave request'
-        }`
-      );
-    } else {
-      alert(
-        'Network error. Please check if the server is running on http://localhost:5000'
-      );
+      // Refresh leave requests
+      await fetchLeaveRequests();
+
+      // Reset form
+      setNewLeaveRequest({ leave_code: "", leave_date: "" });
+      setSelectedDates([]);
+    } catch (err) {
+      console.error("Full error:", err.response?.data || err);
+      const errorMessage = err.response?.data?.error || err.message || "Unknown error occurred";
+      alert("Error submitting leave request: " + errorMessage);
+    } finally {
+      setLoading(false);
     }
-  }
-};
+  };
+
+
+
+
 
 
   const handleChange = (field, value) => {
@@ -387,7 +361,7 @@ const mapStatus = (status) => {
           >
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1, }}>
                   Employee Number
                 </Typography>
                 <TextField
@@ -398,7 +372,8 @@ const mapStatus = (status) => {
                   sx={{
                     "& .MuiInputBase-input.Mui-disabled": {
                       WebkitTextFillColor: "#000000",
-                      color: "#000000"
+                      color: "#000000",
+                      
                     }
                   }}
                 />
@@ -419,27 +394,49 @@ const mapStatus = (status) => {
                     </MenuItem>
                     {leaveTypes.map((type) => (
                       <MenuItem key={type.id} value={type.leave_code}>
-                        ({type.leave_code}) - {type.leave_description} - {type.leave_hours} hours
+                        ({type.leave_code}) - {type.leave_description} 
                       </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
               </Grid>
+               
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1 }}>
+                  Leave Date(s) *
+                </Typography>
+                <Button
+                  variant="outlined"
+                  onClick={() => setDateModalOpen(true)}
+                  sx={{ width: "75%", height: "56px", border: '1px solid #6d2323', color: '#000' }}
+                >
+                  {selectedDates.length > 0
+                    ? `${selectedDates.length} date(s) selected`
+                    : "Pick Leave Dates"}
+                </Button>
+
+                <LeaveDatePickerModal
+                  open={dateModalOpen}
+                  onClose={() => {
+                    setNewLeaveRequest({ ...newLeaveRequest, leave_date: selectedDates.join(",") });
+                    setDateModalOpen(false);
+                  }}
+                  selectedDates={selectedDates}
+                  setSelectedDates={setSelectedDates}
+                />
+              </Grid>
 
               <Grid item xs={12} sm={6}>
                 <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1 }}>
-                  Leave Date
+                  Leave Credits
                 </Typography>
-                <TextField
-                  type="date"
-                  value={newLeaveRequest.leave_date}
-                  onChange={(e) => handleChange('leave_date', e.target.value)}
-                  fullWidth
-                  required
-                  style={inputStyle}
-                  InputLabelProps={{ shrink: true }}
-                />
+                  <LeaveCredits personID={personID} />
+
               </Grid>
+
+
+
+
             </Grid>
 
             {/* Add Button */}
@@ -596,21 +593,6 @@ const mapStatus = (status) => {
                           </Box>
                         </Grid>
 
-                        {/* Leave Hours */}
-                        <Grid item xs={12} sm={1.5}>
-                          <Box>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: "bold", color: "#6d2323", mb: 0.5 }}
-                            >
-                              Hours
-                            </Typography>
-                            <Typography variant="body1" sx={{ fontWeight: "bold" }}>
-                              {leaveTypeInfo.leave_hours} hrs
-                            </Typography>
-                          </Box>
-                        </Grid>
-
                         {/* Leave Date */}
                         <Grid item xs={12} sm={2.5}>
                           <Box>
@@ -657,7 +639,7 @@ const mapStatus = (status) => {
                         sx={{
                           position: "absolute",
                           top: "50%",
-                          right: "10px",
+                          right: "50px",
                           transform: "translateY(-50%)",
                         }}
                       >

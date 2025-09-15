@@ -68,8 +68,7 @@ import SalaryGradeTable from './components/PAYROLL/SalaryGradeTable';
 import DepartmentTable from './components/PAYROLL/DepartmentTable';
 import DepartmentAssignment from './components/PAYROLL/DepartmentAssignment';
 import HolidaySuspension from './components/PAYROLL/HolidaySuspension';
-import Leave from './components/PAYROLL/Leave';
-import LeaveAssignment from './components/PAYROLL/LeaveAssignment';
+import LeaveAssignment from './components/LEAVE/LeaveAssignment';
 import PhilHealthTable from './components/PAYROLL/PhilHealth';
 import PayrollProcessed from './components/PAYROLL/PayrollProcessed';
 import PlantillaTable from './components/PAYROLL/Plantillia';
@@ -122,6 +121,9 @@ import PayslipBulk from './components/PAYROLL/PayslipBulk';
 import SuccessfullOverlay from './components/SuccessfullOverlay';
 import WelcomeOverlay from './components/WelcomeOverlay';
 import LeaveRequestStaff from './components/LEAVE/LeaveRequestStaff';
+import AdminHome from './components/HomeAdmin';
+import LeaveDatePickerModal from './components/LEAVE/LeaveDatePicker';
+import LeaveCredits from './components/LEAVE/LeaveCredits';
 
 
 
@@ -280,6 +282,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['administrator', 'superadmin', 'staff']}>
                   <Home />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/home-admin"
+              element={
+                <ProtectedRoute allowedRoles={['administrator', 'superadmin', 'staff']}>
+                  <AdminHome />
                 </ProtectedRoute>
               }
             />
@@ -626,6 +636,24 @@ function App() {
               }
             />
 
+            <Route
+              path="/leave-date-picker"
+              element={
+                <ProtectedRoute allowedRoles={['administrator', 'superadmin']}>
+                  <LeaveDatePickerModal />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/leave-credits"
+              element={
+                <ProtectedRoute allowedRoles={['administrator', 'superadmin', 'staff']}>
+                  <LeaveCredits />
+                </ProtectedRoute>
+              }
+            />
+
 
 
 
@@ -886,6 +914,22 @@ function App() {
 
             <Route
               path="/leave-request-staff"
+              element={
+                <ProtectedRoute allowedRoles={['staff','administrator', 'superadmin']}>
+                  <LeaveRequestStaff/>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/leave-request-staff"
+              element={
+                <ProtectedRoute allowedRoles={['staff','administrator', 'superadmin']}>
+                  <LeaveRequestStaff/>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/notifications"
               element={
                 <ProtectedRoute allowedRoles={['staff','administrator', 'superadmin']}>
                   <LeaveRequestStaff/>

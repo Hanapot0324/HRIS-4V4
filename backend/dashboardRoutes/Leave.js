@@ -13,397 +13,555 @@ const db = mysql.createPool({
   queueLimit: 0,
 });
 
-// LEAVE TABLE ROUTES
-// GET all leave types
+// ============================
+// LEAVE TABLE ROUTES (unchanged)
+// ============================
+
 router.get('/leave_table', (req, res) => {
-  console.log('GET request to /leave_table');
   db.query('SELECT * FROM leave_table', (err, results) => {
-    if (err) {
-      console.error('Error fetching leave_table:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log('Leave table results:', results);
+    if (err) return res.status(500).json({ error: err.message });
     res.json(results);
   });
 });
 
-// CREATE a new leave type
 router.post('/leave_table', (req, res) => {
   const { leave_description, leave_code, leave_hours } = req.body;
-  console.log('POST request to /leave_table:', req.body);
-  
+
   if (!leave_description || !leave_code || leave_hours === undefined) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   const query = 'INSERT INTO leave_table (leave_description, leave_code, leave_hours) VALUES (?, ?, ?)';
   db.query(query, [leave_description, leave_code, leave_hours], (err, result) => {
-    if (err) {
-      console.error('Error creating leave_table entry:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log('Leave table entry created:', result.insertId);
+    if (err) return res.status(500).json({ error: err.message });
     res.json({ id: result.insertId, leave_description, leave_code, leave_hours });
   });
 });
 
-// UPDATE a leave type
 router.put('/leave_table/:id', (req, res) => {
   const { id } = req.params;
   const { leave_description, leave_code, leave_hours } = req.body;
-  console.log('PUT request to /leave_table/' + id, req.body);
 
   const query = 'UPDATE leave_table SET leave_description = ?, leave_code = ?, leave_hours = ? WHERE id = ?';
   db.query(query, [leave_description, leave_code, leave_hours, id], (err, result) => {
-    if (err) {
-      console.error('Error updating leave_table:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Leave type not found' });
-    }
+    if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Leave type not found' });
     res.json({ id, leave_description, leave_code, leave_hours });
   });
 });
 
-// DELETE a leave type
 router.delete('/leave_table/:id', (req, res) => {
   const { id } = req.params;
-  console.log('DELETE request to /leave_table/' + id);
 
   const query = 'DELETE FROM leave_table WHERE id = ?';
   db.query(query, [id], (err, result) => {
-    if (err) {
-      console.error('Error deleting leave_table entry:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Leave type not found' });
-    }
+    if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Leave type not found' });
     res.json({ message: 'Deleted successfully' });
   });
 });
 
-// LEAVE ASSIGNMENT ROUTES
-// GET all leave assignments
+// ============================
+// LEAVE ASSIGNMENT ROUTES (updated)
+// ============================
+
 router.get('/leave_assignment', (req, res) => {
-  console.log('GET request to /leave_assignment');
-  db.query('SELECT * FROM leave_assignment', (err, results) => {
-    if (err) {
-      console.error('Error fetching leave_assignment:', err);
-      return res.status(500).json({ error: err.message });
-    }
+  const query = `
+    SELECT 
+      la.*,
+      lt.leave_hours as total_hours
+    FROM leave_assignment la
+    JOIN leave_table lt ON la.leave_code = lt.leave_code
+    ORDER BY la.id DESC
+  `;
+  
+  db.query(query, (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
     res.json(results);
   });
 });
 
-// CREATE a new leave assignment
 router.post('/leave_assignment', (req, res) => {
-  const { leave_code, employeeNumber } = req.body;
-  console.log('POST request to /leave_assignment:', req.body);
+  const { leave_code, employeeNumber, approve_date } = req.body;
 
   if (!leave_code || !employeeNumber) {
     return res.status(400).json({ error: 'Missing required fields: leave_code and employeeNumber' });
   }
 
-  const query = 'INSERT INTO leave_assignment (leave_code, employeeNumber) VALUES (?, ?)';
-  db.query(query, [leave_code, employeeNumber], (err, result) => {
-    if (err) {
-      console.error('Error creating leave_assignment:', err);
-      return res.status(500).json({ error: err.message });
+  // Get leave_hours from leave_table to set as total_hours
+  const getLeaveTypeQuery = 'SELECT leave_hours FROM leave_table WHERE leave_code = ?';
+  db.query(getLeaveTypeQuery, [leave_code], (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Leave type not found' });
     }
-    console.log('Leave assignment created:', result.insertId);
-    res.json({ id: result.insertId, leave_code, employeeNumber });
+
+    const totalHours = results[0].leave_hours;
+
+    const insertQuery = `
+      INSERT INTO leave_assignment 
+      (leave_code, employeeNumber, total_hours, remaining_hours, used_hours, approve_date) 
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    
+    db.query(insertQuery, [
+      leave_code, 
+      employeeNumber, 
+      totalHours, 
+      totalHours, // remaining_hours starts as total_hours
+      0, // used_hours starts at 0
+      approve_date || null
+    ], (err2, result) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      res.json({
+        id: result.insertId,
+        leave_code,
+        employeeNumber,
+        total_hours: totalHours,
+        remaining_hours: totalHours,
+        used_hours: 0,
+        approve_date: approve_date || null
+      });
+    });
   });
 });
 
-// UPDATE a leave assignment
 router.put('/leave_assignment/:id', (req, res) => {
   const { id } = req.params;
-  const { leave_code, employeeNumber } = req.body;
-  console.log('PUT request to /leave_assignment/' + id, req.body);
+  const { leave_code, employeeNumber, remaining_hours, used_hours, approve_date } = req.body;
 
-  const query = 'UPDATE leave_assignment SET leave_code = ?, employeeNumber = ? WHERE id = ?';
-  db.query(query, [leave_code, employeeNumber, id], (err, result) => {
-    if (err) {
-      console.error('Error updating leave_assignment:', err);
-      return res.status(500).json({ error: err.message });
+  // Get total_hours from leave_table
+  const getLeaveTypeQuery = 'SELECT leave_hours FROM leave_table WHERE leave_code = ?';
+  db.query(getLeaveTypeQuery, [leave_code], (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Leave type not found' });
     }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Leave assignment not found' });
-    }
-    res.json({ id, leave_code, employeeNumber });
+
+    const totalHours = results[0].leave_hours;
+
+    const updateQuery = `
+      UPDATE leave_assignment 
+      SET leave_code = ?, employeeNumber = ?, total_hours = ?, remaining_hours = ?, used_hours = ?, approve_date = ?
+      WHERE id = ?
+    `;
+    
+    db.query(updateQuery, [
+      leave_code, 
+      employeeNumber, 
+      totalHours, 
+      remaining_hours || (totalHours - (used_hours || 0)), 
+      used_hours || 0, 
+      approve_date || null,
+      id
+    ], (err2, result) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      if (result.affectedRows === 0) return res.status(404).json({ error: 'Leave assignment not found' });
+      
+      res.json({
+        id,
+        leave_code,
+        employeeNumber,
+        total_hours: totalHours,
+        remaining_hours: remaining_hours || (totalHours - (used_hours || 0)),
+        used_hours: used_hours || 0,
+        approve_date: approve_date || null
+      });
+    });
   });
 });
 
-// DELETE a leave assignment
 router.delete('/leave_assignment/:id', (req, res) => {
   const { id } = req.params;
-  console.log('DELETE request to /leave_assignment/' + id);
 
   const query = 'DELETE FROM leave_assignment WHERE id = ?';
   db.query(query, [id], (err, result) => {
-    if (err) {
-      console.error('Error deleting leave_assignment:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Leave assignment not found' });
-    }
+    if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Leave assignment not found' });
     res.json({ message: 'Deleted successfully' });
   });
 });
 
-// NOTIFICATIONS ROUTES
-// GET all notifications
-router.get('/notifications', (req, res) => {
-  console.log('GET request to /notifications');
-  const query = `
-    SELECT * FROM notifications 
-    WHERE recipient_role = 'admin' OR recipient_role = 'all'
-    ORDER BY created_at DESC
-  `;
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error('Error fetching notifications:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(results);
-  });
-});
+// ============================
+// LEAVE REQUEST ROUTES (updated with proper relationships)
+// ============================
 
-// CREATE a new notification
-router.post('/notifications', (req, res) => {
-  const { title, message, type, recipient_role, related_id } = req.body;
-  console.log('POST request to /notifications:', req.body);
-
-  const query = `
-    INSERT INTO notifications (title, message, type, recipient_role, related_id, is_read, created_at) 
-    VALUES (?, ?, ?, ?, ?, 0, NOW())
-  `;
-  db.query(query, [title, message, type, recipient_role, related_id], (err, result) => {
-    if (err) {
-      console.error('Error creating notification:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log('Notification created:', result.insertId);
-    res.json({ id: result.insertId, title, message, type, recipient_role, related_id });
-  });
-});
-
-// Mark notification as read
-router.put('/notifications/:id/read', (req, res) => {
-  const { id } = req.params;
-  console.log('PUT request to mark notification as read:', id);
-
-  const query = 'UPDATE notifications SET is_read = 1 WHERE id = ?';
-  db.query(query, [id], (err, result) => {
-    if (err) {
-      console.error('Error marking notification as read:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Notification not found' });
-    }
-    res.json({ message: 'Notification marked as read' });
-  });
-});
-
-// Get unread notification count
-router.get('/notifications/unread/count', (req, res) => {
-  console.log('GET request to /notifications/unread/count');
-  const query = `
-    SELECT COUNT(*) as count FROM notifications 
-    WHERE (recipient_role = 'admin' OR recipient_role = 'all') AND is_read = 0
-  `;
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error('Error fetching unread notification count:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json({ count: results[0].count });
-  });
-});
-
-// LEAVE REQUEST ROUTES
-// GET all leave requests
 router.get('/leave_request', (req, res) => {
-  console.log('GET request to /leave_request');
-  db.query('SELECT * FROM leave_request ORDER BY leave_date DESC', (err, results) => {
+  const query = `
+    SELECT 
+      id,
+      employeeNumber,
+      leave_code,
+      DATE_FORMAT(leave_date, '%Y-%m-%d') as leave_date,
+      status,
+      created_at
+    FROM leave_request 
+    ORDER BY leave_date DESC
+  `;
+  
+  db.query(query, (err, results) => {
     if (err) {
-      console.error('Error fetching leave_request:', err);
+      console.error('Fetch error:', err);
       return res.status(500).json({ error: err.message });
     }
-    console.log('Leave requests found:', results.length);
     res.json(results);
   });
 });
 
-// CREATE a new leave request
-router.post('/leave_request', (req, res) => {
-  const { employeeNumber, leave_code, leave_date, status = '0' } = req.body;
-  console.log('POST request to /leave_request:', req.body);
+router.get('/leave_request/:employeeNumber', (req, res) => {
+  const { employeeNumber } = req.params;
+  const query = `
+    SELECT 
+      id,
+      employeeNumber,
+      leave_code,
+      DATE_FORMAT(leave_date, '%Y-%m-%d') as leave_date,
+      status,
+      created_at
+    FROM leave_request 
+    WHERE employeeNumber = ? 
+    ORDER BY leave_date DESC
+  `;
   
-  // Validate required fields
-  if (!employeeNumber || !leave_code || !leave_date) {
-    return res.status(400).json({ 
-      error: 'Missing required fields: employeeNumber, leave_code, and leave_date are required' 
-    });
-  }
-
-  // Validate status value
-  const validStatuses = ['0', '1', '2', '3'];
-  if (!validStatuses.includes(status)) {
-    return res.status(400).json({ 
-      error: 'Invalid status value. Must be one of: 0 (Pending), 1 (Manager Approved), 2 (HR Approved), 3 (Denied)' 
-    });
-  }
-
-  // Check for duplicate leave request for the same date and employee
-  const checkQuery = 'SELECT * FROM leave_request WHERE employeeNumber = ? AND leave_date = ?';
-  db.query(checkQuery, [employeeNumber, leave_date], (err, existing) => {
+  db.query(query, [employeeNumber], (err, results) => {
     if (err) {
-      console.error('Error checking for duplicate leave request:', err);
+      console.error('Fetch error:', err);
       return res.status(500).json({ error: err.message });
     }
-
-    if (existing.length > 0) {
-      return res.status(400).json({ 
-        error: 'A leave request already exists for this date' 
-      });
-    }
-
-    // Create the leave request
-    const query = 'INSERT INTO leave_request (employeeNumber, leave_code, leave_date, status, created_at) VALUES (?, ?, ?, ?, NOW())';
-    db.query(query, [employeeNumber, leave_code, leave_date, status], (err, result) => {
-      if (err) {
-        console.error('Error creating leave_request:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      
-      const leaveRequestId = result.insertId;
-      console.log('Leave request created successfully:', leaveRequestId);
-
-      // Get leave type description for notification
-      const getLeaveTypeQuery = 'SELECT leave_description FROM leave_table WHERE leave_code = ?';
-      db.query(getLeaveTypeQuery, [leave_code], (err, leaveTypeResults) => {
-        const leaveDescription = leaveTypeResults && leaveTypeResults.length > 0 
-          ? leaveTypeResults[0].leave_description 
-          : leave_code;
-
-        // Create notification for admin
-        const notificationTitle = 'New Leave Request Submitted';
-        const notificationMessage = `Employee ${employeeNumber} has submitted a new ${leaveDescription} request for ${leave_date}`;
-        
-        const notificationQuery = `
-          INSERT INTO notifications (title, message, type, recipient_role, related_id, is_read, created_at) 
-          VALUES (?, ?, 'leave_request', 'admin', ?, 0, NOW())
-        `;
-        
-        db.query(notificationQuery, [notificationTitle, notificationMessage, leaveRequestId], (err, notifResult) => {
-          if (err) {
-            console.error('Error creating notification:', err);
-            // Don't fail the leave request creation if notification fails
-          } else {
-            console.log('Notification created for new leave request:', notifResult.insertId);
-          }
-        });
-      });
-
-      res.json({ id: leaveRequestId, employeeNumber, leave_code, leave_date, status });
-    });
+    res.json(results);
   });
 });
 
-// UPDATE a leave request
+// ============================
+// POST /leave_request
+// ============================
+router.post('/leave_request', (req, res) => {
+  const { employeeNumber, leave_code, leave_dates, status = 0 } = req.body;
+
+  if (!employeeNumber || !leave_code || !Array.isArray(leave_dates) || leave_dates.length === 0) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const numStatus = Number(status);
+  if (![0, 1, 2, 3].includes(numStatus)) {
+    return res.status(400).json({ error: 'Invalid status value' });
+  }
+
+  const formatDateForMySQL = (dateStr) => {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) throw new Error(`Invalid date: ${dateStr}`);
+    return date.toISOString().split('T')[0];
+  };
+
+  try {
+    // Insert leave_request rows
+    const insertRequests = leave_dates.map(dateStr => [
+      employeeNumber,
+      leave_code,
+      formatDateForMySQL(dateStr),
+      numStatus
+    ]);
+
+    const insertRequestQuery = 'INSERT INTO leave_request (employeeNumber, leave_code, leave_date, status) VALUES ?';
+    db.query(insertRequestQuery, [insertRequests], (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      if (numStatus === 2) {
+        // Process approvals immediately
+        createAssignments(employeeNumber, leave_code, leave_dates, res);
+      } else {
+        res.json({ message: 'Leave request created successfully', inserted: result.affectedRows });
+      }
+    });
+  } catch (error) {
+    return res.status(400).json({ error: 'Invalid date format in request' });
+  }
+
+  // -------------------------
+  // Helper: create leave_assignment row per approved date
+  // -------------------------
+  function createAssignments(empNum, leaveCode, dates, res) {
+    let createdAssignments = [];
+    let processed = 0;
+
+    dates.forEach((dateStr) => {
+      const formattedDate = formatDateForMySQL(dateStr);
+
+      // Get the last assignment for this employee & leave_code
+      const lastAssignmentQuery = `
+        SELECT * FROM leave_assignment 
+        WHERE employeeNumber = ? AND leave_code = ? 
+        ORDER BY id DESC LIMIT 1
+      `;
+      db.query(lastAssignmentQuery, [empNum, leaveCode], (err, lastResults) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        if (lastResults.length === 0) {
+          // First assignment -> fetch total_hours from leave_table
+          db.query('SELECT leave_hours FROM leave_table WHERE leave_code = ?', [leaveCode], (err2, leaveTypeResults) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            if (leaveTypeResults.length === 0) return res.status(404).json({ error: 'Leave type not found' });
+
+            const totalHours = leaveTypeResults[0].leave_hours;
+            insertAssignment(totalHours);
+          });
+        } else {
+          // Subsequent assignment -> total_hours = previous remaining_hours
+          const totalHours = lastResults[0].remaining_hours;
+          insertAssignment(totalHours);
+        }
+
+        function insertAssignment(totalHoursForRow) {
+          const usedHours = 8; // 1 day = 8 hours
+          const remainingHours = totalHoursForRow - usedHours;
+
+          const insertQuery = `
+            INSERT INTO leave_assignment 
+            (leave_code, employeeNumber, total_hours, used_hours, remaining_hours, approved_date) 
+            VALUES (?, ?, ?, ?, ?, ?)
+          `;
+          db.query(insertQuery, [leaveCode, empNum, totalHoursForRow, usedHours, remainingHours, formattedDate], (err3, result3) => {
+            if (err3) return res.status(500).json({ error: err3.message });
+
+            createdAssignments.push({
+              id: result3.insertId,
+              employeeNumber: empNum,
+              leave_code: leaveCode,
+              total_hours: totalHoursForRow,
+              used_hours: usedHours,
+              remaining_hours: remainingHours,
+              approve_date: formattedDate
+            });
+
+            processed++;
+            if (processed === dates.length) {
+              res.json({
+                message: 'Leave request approved and leave_assignments created',
+                assignments: createdAssignments
+              });
+            }
+          });
+        }
+        const insertRequestQuery = 'INSERT INTO leave_request (employeeNumber, leave_code, leave_date, status) VALUES ?';
+          db.query(insertRequestQuery, [insertRequests], (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // 🔔 Add notification for Admin
+            const notifQuery = "INSERT INTO notifications (employeeNumber, description, read_status) VALUES (?, ?, 0)";
+            db.query(notifQuery, [employeeNumber, `${employeeNumber} has added a leave request`]);
+
+            if (numStatus === 2) {
+              createAssignments(employeeNumber, leave_code, leave_dates, res);
+            } else {
+              res.json({ message: 'Leave request created successfully', inserted: result.affectedRows });
+            }
+          });
+
+      });
+    });
+  }
+});
+
+// ============================
+// PUT /leave_request/:id
+// ============================
 router.put('/leave_request/:id', (req, res) => {
   const { id } = req.params;
   const { employeeNumber, leave_code, leave_date, status } = req.body;
-  console.log('PUT request to /leave_request/' + id, req.body);
 
-  // Validate status value if provided
-  if (status) {
-    const validStatuses = ['0', '1', '2', '3'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ 
-        error: 'Invalid status value. Must be one of: 0 (Pending), 1 (Manager Approved), 2 (HR Approved), 3 (Denied)' 
-      });
-    }
+  const numStatus = Number(status);
+  if (![0,1,2,3].includes(numStatus)) {
+    return res.status(400).json({ error: 'Invalid status value' });
   }
 
-  // Get current leave request data for comparison
-  const getCurrentQuery = 'SELECT * FROM leave_request WHERE id = ?';
-  db.query(getCurrentQuery, [id], (err, currentResults) => {
-    if (err) {
-      console.error('Error fetching current leave request:', err);
-      return res.status(500).json({ error: err.message });
+  let formattedDate = leave_date;
+  if (leave_date) {
+    const date = new Date(leave_date);
+    if (isNaN(date.getTime())) return res.status(400).json({ error: 'Invalid date format' });
+    formattedDate = date.toISOString().split('T')[0];
+  }
+
+  const updateQuery = 'UPDATE leave_request SET employeeNumber = ?, leave_code = ?, leave_date = ?, status = ? WHERE id = ?';
+  db.query(updateQuery, [employeeNumber, leave_code, formattedDate, numStatus, id], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Leave request not found' });
+
+    if (numStatus === 2) {
+      // APPROVED → create assignment row
+      createAssignment(employeeNumber, leave_code, formattedDate, res);
+    } else {
+      // IF status changed FROM approved → delete + recalc
+      rollbackAssignment(employeeNumber, leave_code, formattedDate, res);
     }
-
-    if (currentResults.length === 0) {
-      return res.status(404).json({ error: 'Leave request not found' });
-    }
-
-    const currentRequest = currentResults[0];
-    
-    const query = 'UPDATE leave_request SET employeeNumber = ?, leave_code = ?, leave_date = ?, status = ? WHERE id = ?';
-    db.query(query, [employeeNumber, leave_code, leave_date, status, id], (err, result) => {
-      if (err) {
-        console.error('Error updating leave_request:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ error: 'Leave request not found' });
-      }
-
-      // Create notification if status changed
-      if (currentRequest.status !== status) {
-        let statusText = '';
-        switch (status) {
-          case '1': statusText = 'approved by manager'; break;
-          case '2': statusText = 'approved by HR'; break;
-          case '3': statusText = 'denied'; break;
-          default: statusText = 'updated'; break;
-        }
-
-        const notificationTitle = 'Leave Request Status Updated';
-        const notificationMessage = `Leave request for Employee ${employeeNumber} has been ${statusText}`;
-        
-        const notificationQuery = `
-          INSERT INTO notifications (title, message, type, recipient_role, related_id, is_read, created_at) 
-          VALUES (?, ?, 'leave_status_update', 'staff', ?, 0, NOW())
-        `;
-        
-        db.query(notificationQuery, [notificationTitle, notificationMessage, id], (err, notifResult) => {
-          if (err) {
-            console.error('Error creating status update notification:', err);
-          } else {
-            console.log('Status update notification created:', notifResult.insertId);
-          }
-        });
-      }
-
-      console.log('Leave request updated successfully');
-      res.json({ id, employeeNumber, leave_code, leave_date, status });
-    });
   });
+
+  db.query(updateQuery, [employeeNumber, leave_code, formattedDate, numStatus, id], (err, result) => {
+  if (err) return res.status(500).json({ error: err.message });
+  if (result.affectedRows === 0) return res.status(404).json({ error: 'Leave request not found' });
+
+  // 🔔 Add notification for Staff
+  const notifQuery = "INSERT INTO notifications (employeeNumber, description, read_status) VALUES (?, ?, 0)";
+  db.query(notifQuery, [employeeNumber, `Your leave request status has been updated`]);
+
+  if (numStatus === 2) {
+    createAssignment(employeeNumber, leave_code, formattedDate, res);
+  } else {
+    rollbackAssignment(employeeNumber, leave_code, formattedDate, res);
+  }
 });
 
-// DELETE a leave request
+
+  // --------------------------
+  // Create assignment row
+  // --------------------------
+  function createAssignment(empNum, leaveCode, approveDate, res) {
+    const lastAssignmentQuery = `
+      SELECT * FROM leave_assignment 
+      WHERE employeeNumber = ? AND leave_code = ? 
+      ORDER BY id DESC LIMIT 1
+    `;
+    db.query(lastAssignmentQuery, [empNum, leaveCode], (err, lastResults) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      const insertAssignment = (totalHoursForRow) => {
+        const usedHours = 8;
+        const remainingHours = totalHoursForRow - usedHours;
+        const insertQuery = `
+          INSERT INTO leave_assignment 
+          (leave_code, employeeNumber, total_hours, used_hours, remaining_hours, approved_date) 
+          VALUES (?, ?, ?, ?, ?, ?)
+        `;
+        db.query(insertQuery, [leaveCode, empNum, totalHoursForRow, usedHours, remainingHours, approveDate], (err2, result2) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          res.json({
+            message: 'Leave request approved and leave_assignment created',
+            assignment: {
+              id: result2.insertId,
+              employeeNumber: empNum,
+              leave_code: leaveCode,
+              total_hours: totalHoursForRow,
+              used_hours: usedHours,
+              remaining_hours: remainingHours,
+              approve_date: approveDate
+            }
+          });
+        });
+      };
+
+      if (lastResults.length === 0) {
+        db.query('SELECT leave_hours FROM leave_table WHERE leave_code = ?', [leaveCode], (err2, leaveTypeResults) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          if (leaveTypeResults.length === 0) return res.status(404).json({ error: 'Leave type not found' });
+          insertAssignment(leaveTypeResults[0].leave_hours);
+        });
+      } else {
+        insertAssignment(lastResults[0].remaining_hours);
+      }
+    });
+  }
+
+  // --------------------------
+  // Rollback assignment row
+  // --------------------------
+  function rollbackAssignment(empNum, leaveCode, approveDate, res) {
+    // 1. Delete the assignment that matches this approve_date
+    const deleteQuery = `DELETE FROM leave_assignment WHERE employeeNumber = ? AND leave_code = ? AND approved_date = ?`;
+    db.query(deleteQuery, [empNum, leaveCode, approveDate], (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      if (result.affectedRows === 0) {
+        return res.json({ message: 'Leave request updated (no assignment to rollback)' });
+      }
+
+      // 2. Recalculate all later assignments in order
+      const recalcQuery = `
+        SELECT * FROM leave_assignment 
+        WHERE employeeNumber = ? AND leave_code = ? 
+        ORDER BY approved_date ASC
+      `;
+      db.query(recalcQuery, [empNum, leaveCode], (err2, assignments) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+
+        db.query('SELECT leave_hours FROM leave_table WHERE leave_code = ?', [leaveCode], (err3, leaveTypeResults) => {
+          if (err3) return res.status(500).json({ error: err3.message });
+          if (leaveTypeResults.length === 0) return res.status(404).json({ error: 'Leave type not found' });
+
+          let runningTotal = leaveTypeResults[0].leave_hours;
+
+          const updates = assignments.map(row => {
+            const newTotal = runningTotal;
+            const used = row.used_hours;
+            const newRemaining = newTotal - used;
+            runningTotal = newRemaining;
+            return new Promise((resolve, reject) => {
+              const updateRow = `UPDATE leave_assignment SET total_hours = ?, remaining_hours = ? WHERE id = ?`;
+              db.query(updateRow, [newTotal, newRemaining, row.id], (err4) => {
+                if (err4) reject(err4);
+                else resolve();
+              });
+            });
+          });
+
+          Promise.all(updates)
+            .then(() => {
+              res.json({ message: 'Leave request status changed, assignments recalculated' });
+            })
+            .catch(e => res.status(500).json({ error: e.message }));
+        });
+      });
+    });
+  }
+});
+
+
+
+
+
 router.delete('/leave_request/:id', (req, res) => {
   const { id } = req.params;
-  console.log('DELETE request to /leave_request/' + id);
+  
+  // First get the leave request details before deleting
+  db.query('SELECT employeeNumber, leave_code, status FROM leave_request WHERE id = ?', [id], (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (results.length === 0) return res.status(404).json({ error: 'Leave request not found' });
+    
+    const { employeeNumber, leave_code, status } = results[0];
+    
+    // Delete the leave request
+    const deleteQuery = 'DELETE FROM leave_request WHERE id = ?';
+    db.query(deleteQuery, [id], (err2, result) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      
+      // If the deleted request was approved, recalculate leave_assignment
+      if (status === 2) {
+        const countQuery = 'SELECT COUNT(*) as approved_days FROM leave_request WHERE employeeNumber = ? AND leave_code = ? AND status = 2';
+        
+        db.query(countQuery, [employeeNumber, leave_code], (err3, countResults) => {
+          if (err3) return res.status(500).json({ error: err3.message });
 
-  const query = 'DELETE FROM leave_request WHERE id = ?';
-  db.query(query, [id], (err, result) => {
-    if (err) {
-      console.error('Error deleting leave_request:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Leave request not found' });
-    }
-    console.log('Leave request deleted successfully');
-    res.json({ message: 'Deleted successfully' });
+          const approvedDays = countResults[0].approved_days || 0;
+          const usedHours = approvedDays * 8;
+
+          // Recalculate leave_assignment
+          const updateAssignmentQuery = `
+            UPDATE leave_assignment la
+            JOIN leave_table lt ON la.leave_code = lt.leave_code
+            SET 
+              la.used_hours = ?,
+              la.remaining_hours = lt.leave_hours - ?,
+              la.total_hours = lt.leave_hours
+            WHERE la.employeeNumber = ? AND la.leave_code = ?
+          `;
+
+          db.query(updateAssignmentQuery, [usedHours, usedHours, employeeNumber, leave_code], (err4) => {
+            if (err4) return res.status(500).json({ error: err4.message });
+            res.json({ message: 'Leave request deleted and leave_assignment recalculated' });
+          });
+        });
+      } else {
+        res.json({ message: 'Leave request deleted successfully' });
+      }
+    });
   });
 });
 
